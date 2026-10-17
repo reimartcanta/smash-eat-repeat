@@ -145,6 +145,17 @@ tr.top td.rank{color:var(--cork)}
 .readonly .team.pick{cursor:default}
 .start{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:12px;display:grid;gap:10px}
 .players input:disabled{background:transparent;border-color:transparent;color:var(--fg);opacity:1;-webkit-text-fill-color:var(--fg);padding-left:0;font-weight:600}
+.prow{display:flex;gap:8px;align-items:center;min-width:0}
+.prow input{flex:1;min-width:0}
+.xbtn{flex:none;border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:6px;height:36px;min-width:36px;padding:0 8px;cursor:pointer;font:600 .85rem var(--body)}
+.xbtn.sure{border-color:var(--warn);color:var(--warn)}
+.xbtn:disabled{opacity:.35;cursor:not-allowed}
+.addrow input{flex:1;min-width:0}
+.note.warn{color:var(--warn);font-weight:600}
+.readonly .xbtn,.readonly #addRow,.readonly .edit-only{display:none}
+#tab-players{position:relative;isolation:isolate;margin-top:18px;padding:18px 16px 24px;border-radius:12px;overflow:hidden;background:var(--court) url("players-bg.jpg") center 70%/cover no-repeat}
+#tab-players::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 70%,transparent),color-mix(in srgb,var(--bg) 88%,transparent) 55%)}
+#tab-players .players input:not(:disabled){background:color-mix(in srgb,var(--surface) 92%,transparent)}
 .confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;padding:10px 12px;border:1px solid var(--warn);border-radius:8px}
 @media (prefers-reduced-motion:no-preference){.match{animation:in .25s ease both}@keyframes in{from{transform:translateY(4px)}to{transform:none}}}
 </style>
@@ -160,8 +171,8 @@ tr.top td.rank{color:var(--cork)}
   <div class="stats">
     <div class="stat"><b id="sRounds">0</b><span>Rounds</span></div>
     <div class="stat"><b id="sScored">0</b><span>Decided</span></div>
-    <div class="stat"><b id="sMatches">0/42</b><span>Matches</span></div>
-    <div class="stat"><b id="sPairs">0/91</b><span>Partnerships used</span></div>
+    <div class="stat"><b id="sMatches">0</b><span>Matches</span></div>
+    <div class="stat"><b id="sPairs">0</b><span>Partnerships used</span></div>
   </div>
 </div></header>
 
@@ -177,10 +188,9 @@ tr.top td.rank{color:var(--cork)}
     <div id="syncBar" class="sync">Connecting…</div>
     <div class="row">
       <button class="btn" id="genBtn">Generate next round</button>
-      <span class="sit">2 courts</span>
-      <button class="btn ghost" id="undoBtn">Remove last round</button>
+            <button class="btn ghost" id="undoBtn">Remove last round</button>
     </div>
-    <p class="note">21 rounds of 2 matches. 8 players play each round and 6 rest. Every player ends with exactly 12 games and 9 rests. Tick the winning team after each match. The 4 latest rounds are shown.</p>
+    <p class="note" id="planNote"></p>
     <div class="progress" aria-hidden="true"><i id="progBar"></i></div>
     <div id="genMsg"></div>
     <div id="rounds"></div>
@@ -200,8 +210,14 @@ tr.top td.rank{color:var(--cork)}
 
   <section id="tab-players" hidden>
     <h2>Player names</h2>
+    <p class="note" id="rosterCount" style="margin:0 0 10px"></p>
     <div class="players" id="playerList"></div>
-    <p class="note">Names save as you type.</p>
+    <form class="row addrow" id="addRow" style="margin-top:12px">
+      <input type="text" id="addName" maxlength="24" placeholder="New player name" aria-label="New player name">
+      <button class="btn" id="addBtn" type="submit">Add player</button>
+    </form>
+    <p class="note warn" id="rosterNote" hidden></p>
+    <p class="note edit-only">Names save as you type. Tap ✕ twice to remove a player.</p>
     <h2 style="margin-top:22px">Organizer</h2>
     <div class="row" id="authRow"><button class="btn" id="signInBtn">Organizer sign in with Google</button><span class="sit" id="authInfo"></span><button class="btn ghost" id="signOutBtn" hidden>Sign out</button></div>
     <p class="note">Only the organizer signs in. Everyone else just opens the link to watch.</p>
@@ -211,13 +227,39 @@ tr.top td.rank{color:var(--cork)}
 </main>
 
 <script>
-const N = 14, COURTS = 2, MAX = 42, ROUNDS = MAX / COURTS, KEY = "shuttle-doubles-v2", OLDKEY = "shuttle-doubles-v1";
+const KEY = "shuttle-doubles-v2", OLDKEY = "shuttle-doubles-v1", MIN_P = 6, MAX_P = 24, MAX_GAMES = 12;
+let N = 14, COURTS = 2, MAX = 42, ROUNDS = 21;
+// Tournament size for n players: equal games for everyone, no repeated partners, at most 12 games each.
+function sizeFor(n){
+  const courts = n >= 8 ? 2 : 1, pairs = n*(n-1)/2, cands = [];
+  for(let M = Math.floor(pairs/2); M >= 1; M--) if((4*M) % n === 0 && 4*M/n <= MAX_GAMES) cands.push(M);
+  return {courts, pairs, cands};
+}
+function setCfg(n, max){ N = n; COURTS = sizeFor(n).courts; MAX = max; ROUNDS = Math.ceil(max / COURTS); }
+function planMatches(plan){ return plan ? plan.reduce((t,r)=>t+r.matches.length,0) : 0; }
+function rid(){ return Math.random().toString(36).slice(2,9); }
+function defaultRoster(n){ return Array.from({length:n},(_,i)=>({id:rid(), name:"Player "+(i+1)})); }
 const pk = (a,b) => a<b ? a+"-"+b : b+"-"+a;
 let S;
 
-function fresh(names){ return {players: names || Array.from({length:N},(_,i)=>"Player "+(i+1)), rounds:[], plan:null}; }
-function load(){ try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.players && s.players.length===N && s.plan) return s; }catch(e){} return null; }
-function oldNames(){ try{ const s = JSON.parse(localStorage.getItem(OLDKEY)); if(s && s.players && s.players.length===N) return s.players; }catch(e){} return null; }
+// Builds a whole new tournament (plan + first round shown) for a roster of {id,name}.
+function makeTournament(roster){
+  const st = {roster: roster.map(r=>({id:r.id, name:r.name})), players: roster.map(r=>r.name), pids: roster.map(r=>r.id), rounds:[], plan:null};
+  const keep = S; S = st;
+  const z = sizeFor(roster.length);
+  z.cands.forEach((M,k)=>{ if(st.plan) return; setCfg(roster.length, M); const plan = buildPlan(k===0 ? 900 : 250); if(plan) st.plan = plan; });
+  if(st.plan){ st.rounds.push(JSON.parse(JSON.stringify(st.plan[0]))); }
+  S = keep;
+  return st;
+}
+function normalize(st){
+  if(!st.roster) st.roster = st.players.map((n,i)=>({id:"p"+i, name:n}));
+  if(!st.pids) st.pids = st.roster.map(r=>r.id);
+  setCfg(st.players.length, planMatches(st.plan));
+  return st;
+}
+function load(){ try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.players && s.plan) return normalize(s); }catch(e){} return null; }
+function oldNames(){ try{ const s = JSON.parse(localStorage.getItem(OLDKEY)); if(s && s.players) return s.players; }catch(e){} return null; }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
 
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
@@ -244,13 +286,13 @@ function pairUp(sel, used){
 }
 
 function playedCount(){ return S.rounds.reduce((s,r)=>s+r.matches.length,0); }
-// Plans all 21 rounds up front, retrying until every player has exactly 12 games and no partner repeats.
-function buildPlan(){
-  const keep = S.rounds;
-  for(let attempt=0; attempt<300; attempt++){
+// Plans every round up front, retrying until all players have the same number of games and no partner repeats.
+function buildPlan(ms){
+  const keep = S.rounds, deadline = Date.now() + (ms || 600);
+  for(let attempt=0; attempt<150 && Date.now() < deadline; attempt++){
     S.rounds = [];
     let ok = true;
-    for(let r=0; r<ROUNDS; r++){ const x = genRoundWith(COURTS); if(!x){ ok=false; break; } S.rounds.push(x); }
+    for(let r=0; r<ROUNDS; r++){ const x = genRoundWith(Math.min(COURTS, MAX - r*COURTS)); if(!x){ ok=false; break; } S.rounds.push(x); }
     if(ok){ const g = history().games; if(g.every(v=>v===g[0])){ const plan = S.rounds; S.rounds = keep; return plan; } }
   }
   S.rounds = keep; return null;
@@ -376,16 +418,36 @@ function renderMatrix(){
   document.getElementById("matrix").innerHTML = h + "</tbody>";
 }
 
+let rosterSig = "", confirmId = null;
+function sameLineup(){ return S.roster.length===S.pids.length && S.roster.every((r,i)=>r.id===S.pids[i]); }
 function renderPlayers(){
   const box = document.getElementById("playerList");
-  if(box.childElementCount !== N){
-    box.innerHTML = S.players.map((p,i)=>`<label for="p${i}"><span class="num">${i+1}</span><input type="text" id="p${i}" maxlength="24"></label>`).join("");
-    box.querySelectorAll("input").forEach((inp,i)=>inp.addEventListener("input",()=> act.rename(i, inp.value.trim())));
+  const sig = S.roster.map(r=>r.id).join(",") + "|" + canWrite + "|" + confirmId;
+  if(sig !== rosterSig){
+    rosterSig = sig;
+    box.innerHTML = S.roster.map((r,i)=>`<div class="prow"><span class="num">${i+1}</span><input type="text" id="p-${r.id}" maxlength="24" aria-label="Player ${i+1} name"><button class="xbtn ${confirmId===r.id?"sure":""}" data-id="${r.id}" type="button">${confirmId===r.id?"Remove":"✕"}</button></div>`).join("");
+    box.querySelectorAll("input").forEach((inp,i)=>{ const id = S.roster[i].id; inp.addEventListener("input",()=> act.rename(id, inp.value.trim())); });
+    box.querySelectorAll(".xbtn").forEach(b=>b.addEventListener("click",()=>{
+      const id = b.dataset.id;
+      if(confirmId === id){ confirmId = null; act.removePlayer(id); }
+      else { confirmId = id; renderPlayers(); }
+    }));
   }
   box.querySelectorAll("input").forEach((inp,i)=>{
     inp.disabled = !canWrite;
-    if(document.activeElement !== inp) inp.value = S.players[i];
+    if(document.activeElement !== inp) inp.value = S.roster[i].name;
   });
+  box.querySelectorAll(".xbtn").forEach(b=>{ b.disabled = S.roster.length <= MIN_P; b.setAttribute("aria-label", "Remove " + (S.roster.find(r=>r.id===b.dataset.id)||{}).name); });
+  const n = S.roster.length;
+  document.getElementById("addBtn").disabled = n >= MAX_P;
+  document.getElementById("rosterCount").textContent = `${n} player${n===1?"":"s"} (${MIN_P} to ${MAX_P})`;
+  const note = document.getElementById("rosterNote");
+  if(sameLineup()){ note.hidden = true; }
+  else {
+    const z = sizeFor(n), M = z.cands[0] || 0;
+    note.hidden = false;
+    note.textContent = `Player list changed. The current tournament keeps its ${N} players. Tap “Start a new tournament” below to play with these ${n}: about ${M} matches, ${M ? 4*M/n : 0} games each.`;
+  }
 }
 
 function renderStats(){
@@ -399,14 +461,17 @@ function renderStats(){
   const done = played >= MAX;
   const gb = document.getElementById("genBtn");
   gb.disabled = done;
-  gb.textContent = done ? "All 42 matches drawn" : "Generate next round";
+  gb.textContent = done ? `All ${MAX} matches drawn` : "Generate next round";
   const msg = document.getElementById("genMsg");
   if(done){
     msg.innerHTML = scored >= MAX
       ? `<div class="done">Tournament complete. Check the Ranking tab for the final standings.</div>`
-      : `<div class="done">All 42 matches are drawn. ${MAX-scored} still need a winner.</div>`;
+      : `<div class="done">All ${MAX} matches are drawn. ${MAX-scored} still need a winner.</div>`;
   } else if(msg.querySelector(".done")) msg.innerHTML = "";
-  document.getElementById("sPairs").textContent = used.size + "/91";
+  document.getElementById("sPairs").textContent = used.size + "/" + (N*(N-1)/2);
+  const g = 4*MAX/N, full = Math.floor(MAX/COURTS), extra = MAX - full*COURTS;
+  document.getElementById("planNote").textContent =
+    `${N} players, ${MAX} matches on ${COURTS} court${COURTS>1?"s":""}: ${full} rounds of ${COURTS} match${COURTS>1?"es":""}${extra?` plus 1 round of ${extra}`:""}. Every player plays exactly ${g} games and never partners anyone twice. Tick the winning team after each match. The 4 latest rounds are shown.`;
   document.getElementById("undoBtn").disabled = !S.rounds.length;
   document.body.classList.toggle("readonly", !canWrite);
 }
@@ -423,20 +488,16 @@ function showMsg(html){ document.getElementById("genMsg").innerHTML = html; }
 // Shared doc -> view state
 function fromDoc(d){
   const wins = d.wins || {};
-  return { players: d.players.slice(), plan: d.plan,
+  return normalize({ players: d.players.slice(), plan: d.plan, roster: d.roster ? d.roster.map(r=>({id:r.id, name:r.name})) : null, pids: d.pids ? d.pids.slice() : null,
     rounds: d.plan.slice(0, d.revealed).map((r,ri)=>({ sit:r.sit,
-      matches: r.matches.map((m,mi)=>({a:m.a, b:m.b, win: wins[ri+"_"+mi] || ""})) })) };
+      matches: r.matches.map((m,mi)=>({a:m.a, b:m.b, win: wins[ri+"_"+mi] || ""})) })) });
 }
 // Local state -> shared doc
 function toDoc(st){
   const wins = {};
   st.rounds.forEach((r,ri)=>r.matches.forEach((m,mi)=>{ const w=winnerOf(m); if(w) wins[ri+"_"+mi]=w; }));
   const plan = st.plan.map(r=>({sit:r.sit, matches:r.matches.map(m=>({a:m.a, b:m.b}))}));
-  return { tid: Math.random().toString(36).slice(2,10), players: st.players.slice(), plan, revealed: st.rounds.length, wins };
-}
-function newDoc(names){
-  const keep = S; S = fresh(names); S.plan = buildPlan(); const r = genRound(); if(r) S.rounds.push(r);
-  const d = toDoc(S); S = keep; return d;
+  return { tid: Math.random().toString(36).slice(2,10), players: st.players.slice(), roster: st.roster.map(r=>({id:r.id, name:r.name})), pids: st.pids.slice(), plan, revealed: st.rounds.length, wins };
 }
 
 async function write(fn){
@@ -465,15 +526,33 @@ const act = {
       write(()=>ops.setRevealed(ri, D.plan[ri].matches.map((_,mi)=>ri+"_"+mi)));
     } else { S.rounds.pop(); save(); renderAll(); }
   },
-  rename(i, name){
-    S.players[i] = name || ("Player "+(i+1));
+  rename(id, name){
+    const r = S.roster.find(x=>x.id===id); if(!r) return;
+    const ri = S.roster.indexOf(r);
+    r.name = name || ("Player "+(ri+1));
+    const ti = S.pids.indexOf(id); if(ti >= 0) S.players[ti] = r.name;
     renderRounds(); renderStandings(); renderMatrix();
-    if(mode==="shared"){ clearTimeout(nameTimer); const arr=S.players.slice(); nameTimer=setTimeout(()=>write(()=>ops.setPlayers(arr)), 700); }
+    if(mode==="shared"){ clearTimeout(nameTimer); const ro = S.roster.map(x=>({id:x.id,name:x.name})), pl = S.players.slice(); nameTimer=setTimeout(()=>write(()=>ops.setNames(ro, pl)), 700); }
     else save();
   },
+  addPlayer(name){
+    if(S.roster.length >= MAX_P) return;
+    const ro = S.roster.map(x=>({id:x.id,name:x.name}));
+    ro.push({id: rid(), name: name || ("Player "+(ro.length+1))});
+    if(mode==="shared") write(()=>ops.setNames(ro, S.players.slice()));
+    else { S.roster = ro; save(); renderAll(); }
+  },
+  removePlayer(id){
+    if(S.roster.length <= MIN_P) return;
+    const ro = S.roster.filter(x=>x.id!==id).map(x=>({id:x.id,name:x.name}));
+    if(mode==="shared") write(()=>ops.setNames(ro, S.players.slice()));
+    else { S.roster = ro; save(); renderAll(); }
+  },
   reset(){
-    if(mode==="shared") write(()=>ops.setAll(newDoc()));
-    else { S=fresh(); S.plan=buildPlan(); const r=genRound(); if(r) S.rounds.push(r); save(); renderAll(); }
+    const st = makeTournament(S.roster);
+    if(!st.plan){ showMsg(`<div class="msg">A schedule couldn't be built for ${S.roster.length} players. Add or remove a player and try again.</div>`); setCfg(S.players.length, planMatches(S.plan)); return; }
+    if(mode==="shared") write(()=>ops.setAll(toDoc(st)));
+    else { S = normalize(st); save(); renderAll(); }
   }
 };
 
@@ -481,9 +560,14 @@ document.getElementById("genBtn").addEventListener("click",()=>{ showMsg(""); ac
 document.getElementById("undoBtn").addEventListener("click",()=>{ showMsg(""); act.undo(); });
 document.getElementById("resetBtn").addEventListener("click",()=>{
   const box = document.getElementById("resetBox");
-  box.innerHTML = `<div class="confirm"><span>This clears all rounds, winners and names${mode==="shared"?" for everyone":""}.</span><button class="btn danger" id="resetYes">Clear everything</button><button class="btn ghost" id="resetNo">Keep it</button></div>`;
+  box.innerHTML = `<div class="confirm"><span>This clears all rounds and winners${mode==="shared"?" for everyone":""} and builds a new schedule for the ${S.roster.length} players in the list.</span><button class="btn danger" id="resetYes">Clear everything</button><button class="btn ghost" id="resetNo">Keep it</button></div>`;
   document.getElementById("resetNo").onclick = ()=> box.innerHTML="";
   document.getElementById("resetYes").onclick = ()=>{ box.innerHTML=""; act.reset(); };
+});
+document.getElementById("addRow").addEventListener("submit",e=>{
+  e.preventDefault();
+  const inp = document.getElementById("addName");
+  act.addPlayer(inp.value.trim()); inp.value = "";
 });
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
   document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-selected", x===b));
@@ -492,7 +576,7 @@ document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()
 
 // Start with this device's copy so the page is usable immediately
 S = load();
-if(!S){ S = fresh(oldNames()); S.plan = buildPlan(); const r = genRound(); if(r) S.rounds.push(r); save(); }
+if(!S){ const old = oldNames(); S = normalize(makeTournament(old ? old.map(n=>({id:rid(), name:n})) : defaultRoster(14))); save(); }
 renderAll();
 setSync("local", "Connecting to the shared tournament…");
 
@@ -534,7 +618,7 @@ const FIREBASE_CONFIG = {
   ops = {
     setWin:(k,side)=> root.child("wins/"+k).set(side || null),
     setRevealed:(n,clearKeys)=>{ const u={revealed:n}; clearKeys.forEach(k=>u["wins/"+k]=null); return root.update(u); },
-    setPlayers:(arr)=> root.child("players").set(arr),
+    setNames:(roster, players)=> root.update({roster, players}),
     setAll:(doc)=> root.set(doc)
   };
   canWrite = false;
@@ -561,6 +645,8 @@ const FIREBASE_CONFIG = {
     if(!d || !d.plan || !d.players){ D = null; showStart(); return; }
     d.plan = Object.values(d.plan).map(r=>({ sit: r.sit ? Object.values(r.sit) : [], matches: Object.values(r.matches).map(m=>({a:Object.values(m.a), b:Object.values(m.b)})) }));
     d.players = Object.values(d.players);
+    if(d.roster) d.roster = Object.values(d.roster);
+    if(d.pids) d.pids = Object.values(d.pids);
     d.wins = d.wins || {};
     D = d; mode = "shared"; S = fromDoc(d);
     renderAll(); syncText();
