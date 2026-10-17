@@ -141,9 +141,10 @@ tr.top td.rank{color:var(--cork)}
 .sync::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
 .sync.live{color:var(--win)} .sync.live::before{background:var(--win)}
 .sync.local::before{background:var(--cork)}
-.readonly #genBtn,.readonly .players input,.readonly #undoBtn,.readonly #resetBtn,.readonly .court-tag .hint{display:none}
+.readonly #genBtn,.readonly #undoBtn,.readonly #resetBtn,.readonly .court-tag .hint{display:none}
 .readonly .team.pick{cursor:default}
 .start{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:12px;display:grid;gap:10px}
+.players input:disabled{background:transparent;border-color:transparent;color:var(--fg);opacity:1;-webkit-text-fill-color:var(--fg);padding-left:0;font-weight:600}
 .confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;padding:10px 12px;border:1px solid var(--warn);border-radius:8px}
 @media (prefers-reduced-motion:no-preference){.match{animation:in .25s ease both}@keyframes in{from{transform:translateY(4px)}to{transform:none}}}
 </style>
