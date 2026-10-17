@@ -515,7 +515,15 @@ function drawStart(){
 
 // ===== Firebase connection =====
 // Paste the firebaseConfig from the Firebase console here.
-const FIREBASE_CONFIG = null;
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCqtoTs_CGlBUoLi4_Xg0QXvRAh7J0xmpc",
+  authDomain: "smash-eat-repeat.firebaseapp.com",
+  databaseURL: "https://smash-eat-repeat-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "smash-eat-repeat",
+  storageBucket: "smash-eat-repeat.firebasestorage.app",
+  messagingSenderId: "794589707173",
+  appId: "1:794589707173:web:7cbf200cedcefe5dbfc64c"
+};
 
 (function connect(){
   if(!FIREBASE_CONFIG || !window.firebase){ setSync("local", "Offline copy. Results are saved on this device only."); return; }
