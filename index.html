@@ -154,7 +154,9 @@ tr.top td.rank{color:var(--cork)}
 .note.warn{color:var(--warn);font-weight:600}
 .readonly .xbtn,.readonly #addRow,.readonly .edit-only{display:none}
 #tab-players{position:relative;isolation:isolate;margin-top:18px;padding:18px 16px 24px;border-radius:12px;overflow:hidden;background:var(--court) url("players-bg.jpg") center 70%/cover no-repeat}
-#tab-players::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 70%,transparent),color-mix(in srgb,var(--bg) 88%,transparent) 55%)}
+#tab-players::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 30%,transparent),color-mix(in srgb,var(--bg) 45%,transparent) 60%,color-mix(in srgb,var(--bg) 60%,transparent))}
+#tab-players h2,#tab-players .note,#tab-players .num,#tab-players .inline,#tab-players .sit{text-shadow:0 0 3px var(--bg),0 0 8px var(--bg),0 0 14px var(--bg)}
+#tab-players .note{color:var(--fg)}
 #tab-players .players input:not(:disabled){background:color-mix(in srgb,var(--surface) 92%,transparent)}
 .soundrow{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .soundrow h2{margin:0}
