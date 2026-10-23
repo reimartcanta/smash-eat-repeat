@@ -156,6 +156,10 @@ tr.top td.rank{color:var(--cork)}
 #tab-players{position:relative;isolation:isolate;margin-top:18px;padding:18px 16px 24px;border-radius:12px;overflow:hidden;background:var(--court) url("players-bg.jpg") center 70%/cover no-repeat}
 #tab-players::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,color-mix(in srgb,var(--bg) 70%,transparent),color-mix(in srgb,var(--bg) 88%,transparent) 55%)}
 #tab-players .players input:not(:disabled){background:color-mix(in srgb,var(--surface) 92%,transparent)}
+.soundrow{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.soundrow h2{margin:0}
+.soundbtn{font:600 .85rem var(--body);border:1px solid var(--court);background:color-mix(in srgb,var(--surface) 85%,transparent);color:var(--court);border-radius:999px;padding:6px 12px;cursor:pointer}
+.soundbtn.on{background:var(--court);color:var(--court-ink)}
 .confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;padding:10px 12px;border:1px solid var(--warn);border-radius:8px}
 @media (prefers-reduced-motion:no-preference){.match{animation:in .25s ease both}@keyframes in{from{transform:translateY(4px)}to{transform:none}}}
 </style>
@@ -209,7 +213,8 @@ tr.top td.rank{color:var(--cork)}
   </section>
 
   <section id="tab-players" hidden>
-    <h2>Player names</h2>
+    <audio id="playersSound" src="players-sound.mp3" preload="auto"></audio>
+    <div class="soundrow"><h2>Player names</h2><button class="soundbtn" id="soundBtn" type="button" aria-label="Play sound">▶ Play sound</button></div>
     <p class="note" id="rosterCount" style="margin:0 0 10px"></p>
     <div class="players" id="playerList"></div>
     <form class="row addrow" id="addRow" style="margin-top:12px">
@@ -641,9 +646,17 @@ document.getElementById("addRow").addEventListener("submit",e=>{
   const inp = document.getElementById("addName");
   act.addPlayer(inp.value.trim()); inp.value = "";
 });
+// Players tab sound: starts when the tab is opened, stops when you leave it.
+const snd = document.getElementById("playersSound"), sndBtn = document.getElementById("soundBtn");
+function sndLabel(){ const on = !snd.paused; sndBtn.textContent = on ? "■ Stop sound" : "▶ Play sound"; sndBtn.setAttribute("aria-label", on ? "Stop sound" : "Play sound"); sndBtn.classList.toggle("on", on); }
+function sndPlay(){ try{ snd.currentTime = 0; const p = snd.play(); if(p && p.catch) p.catch(()=>{}); }catch(e){} }
+function sndStop(){ try{ snd.pause(); snd.currentTime = 0; }catch(e){} }
+["play","pause","ended"].forEach(ev=>snd.addEventListener(ev, sndLabel));
+sndBtn.addEventListener("click",()=>{ snd.paused ? sndPlay() : sndStop(); });
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
   document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-selected", x===b));
   document.querySelectorAll("main section").forEach(s=>s.hidden = s.id !== "tab-"+b.dataset.tab);
+  if(b.dataset.tab === "players") sndPlay(); else sndStop();
 }));
 
 // Start with this device's copy so the page is usable immediately
