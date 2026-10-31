@@ -156,6 +156,22 @@ tr.top td.rank{color:var(--cork)}
 .adminlist{display:grid;gap:6px}
 .arow{display:flex;align-items:center;gap:8px;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 6px 6px 12px;min-width:0}
 .arow span{min-width:0;overflow-wrap:anywhere;font-weight:600}
+.match{padding:4px 0 6px}
+.srow{display:grid;grid-template-columns:minmax(0,1fr) repeat(var(--sets),46px) 30px;gap:8px;align-items:center;padding:6px 12px}
+.sets2{--sets:2} .sets3{--sets:3}
+.shead{padding-top:8px;padding-bottom:2px}
+.shead .court-tag{padding:0;min-width:0}
+.sh{font-family:var(--display);font-weight:700;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:center}
+.srow .names{min-width:0;overflow-wrap:anywhere;cursor:pointer}
+.setin{width:100%;min-width:0;max-width:46px;justify-self:center;padding:7px 2px!important;text-align:center;font-family:var(--mono)!important;font-weight:700;font-size:1rem!important;-moz-appearance:textfield}
+.setin::-webkit-outer-spin-button,.setin::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.setin[data-won]{border-color:var(--win);color:var(--win)}
+.setin:disabled{background:transparent;border-color:transparent;opacity:1;color:var(--fg);-webkit-text-fill-color:currentColor}
+.setin:disabled[data-won]{color:var(--win)}
+.srow .wbox{width:24px;height:24px;padding:0;justify-self:center;margin:0;accent-color:var(--court);cursor:pointer}
+.wbox:disabled:checked{accent-color:var(--win);opacity:1}
+.wbox:disabled{cursor:default}
+.team.srow+.team.srow{border-top:1px dashed var(--line)}
 .confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;padding:10px 12px;border:1px solid var(--warn);border-radius:8px}
 @media (prefers-reduced-motion:no-preference){.match{animation:in .25s ease both}@keyframes in{from{transform:translateY(4px)}to{transform:none}}}
 </style>
@@ -169,7 +185,7 @@ tr.top td.rank{color:var(--cork)}
   <h1>Smash, Eat, Repeat <span class="h1-tail">walang kwentang tournament</span></h1>
   <p class="prize">Rank #1 player after the tournament will win free massage from Eco.</p>
   <div class="stats">
-    <div class="stat"><b id="sRounds">0</b><span>Rounds</span></div>
+    <div class="stat"><b id="sRounds">0</b><span>Games</span></div>
     <div class="stat"><b id="sScored">0</b><span>Decided</span></div>
     <div class="stat"><b id="sMatches">0</b><span>Matches</span></div>
     <div class="stat"><b id="sPairs">0</b><span>Partnerships used</span></div>
@@ -177,7 +193,7 @@ tr.top td.rank{color:var(--cork)}
 </div></header>
 
 <nav><div class="wrap" role="tablist">
-  <button role="tab" data-tab="rounds" aria-selected="true">Rounds</button>
+  <button role="tab" data-tab="rounds" aria-selected="true">Games</button>
   <button role="tab" data-tab="standings" aria-selected="false">Ranking</button>
   <button role="tab" data-tab="partners" aria-selected="false">Partners</button>
   <button role="tab" data-tab="players" aria-selected="false">Players</button>
@@ -187,8 +203,8 @@ tr.top td.rank{color:var(--cork)}
   <section id="tab-rounds">
     <div id="syncBar" class="sync">Connecting…</div>
     <div class="row">
-      <button class="btn" id="genBtn">Generate next round</button>
-            <button class="btn ghost" id="undoBtn">Remove last round</button>
+      <button class="btn" id="genBtn">Generate next game</button>
+            <button class="btn ghost" id="undoBtn">Remove last game</button>
     </div>
     <p class="note" id="planNote"></p>
     <div class="progress" aria-hidden="true"><i id="progBar"></i></div>
@@ -204,7 +220,7 @@ tr.top td.rank{color:var(--cork)}
 
   <section id="tab-partners" hidden>
     <h2>Partner grid</h2>
-    <p class="note" style="margin:0 0 10px">A filled cell shows the round where two players were partners. Empty cells are partnerships still available.</p>
+    <p class="note" style="margin:0 0 10px">A filled cell shows the game where two players were partners. Empty cells are partnerships still available.</p>
     <div class="scroll"><table class="matrix" id="matrix"></table></div>
   </section>
 
@@ -223,7 +239,7 @@ tr.top td.rank{color:var(--cork)}
     <p class="note">Only the organizer and admins sign in. Everyone else just opens the link to watch.</p>
     <div id="adminBox" hidden style="margin-top:16px">
       <h2>Admins</h2>
-      <p class="note" style="margin:0 0 10px">Admins sign in with their own Google account and can tick winners, run rounds and edit players. Only you can add or remove admins.</p>
+      <p class="note" style="margin:0 0 10px">Admins sign in with their own Google account and can enter scores, tick winners, run games and edit players. Only you can add or remove admins.</p>
       <div id="adminList" class="adminlist"></div>
       <form class="row addrow" id="adminForm" style="margin-top:10px">
         <input type="email" id="adminEmail" placeholder="Admin's Gmail address" aria-label="Admin's Gmail address" autocomplete="off">
@@ -235,7 +251,7 @@ tr.top td.rank{color:var(--cork)}
       <label class="inline" for="gamesSel" style="margin-bottom:8px">Next tournament
         <select id="gamesSel"></select>
       </label>
-      <p class="note" style="margin:0 0 10px">More games makes the tournament longer. Everyone always plays the same number of games and never partners anyone twice.</p>
+      <p class="note" style="margin:0 0 10px">More matches makes the tournament longer. Everyone always plays the same number of matches and never partners anyone twice.</p>
     </div>
     <div class="row"><button class="btn danger" id="resetBtn">Start a new tournament</button></div>
     <div id="resetBox"></div>
@@ -423,7 +439,20 @@ function validScore(a,b){
   return "Check the score: win by 2, or 30 points at 29-all.";
 }
 
+// Set scores: m.sc = {a:["","",""], b:["","",""]}. Best of 3 sets.
+function emptySc(){ return {a:["","",""], b:["","",""]}; }
+function hasScores(m){ return !!m.sc && [0,1,2].some(k=>m.sc.a[k]!==""||m.sc.b[k]!==""); }
+function setWin(m,k){ const x=m.sc.a[k], y=m.sc.b[k]; if(x===""||y==="") return ""; if(+x===+y) return ""; return +x>+y?"a":"b"; }
+function needSet3(m){ if(!m.sc) return false; const w1=setWin(m,0), w2=setWin(m,1); return (w1 && w2 && w1!==w2) || m.sc.a[2]!=="" || m.sc.b[2]!==""; }
+function setsWinner(m){
+  if(!hasScores(m)) return "";
+  const w1=setWin(m,0), w2=setWin(m,1);
+  if(w1 && w1===w2) return w1;
+  if(w1 && w2) return setWin(m,2);
+  return "";
+}
 function winnerOf(m){
+  if(hasScores(m)) return setsWinner(m);
   if(m.win==="a"||m.win==="b") return m.win;
   if(m.sa!=null&&m.sa!==""&&m.sb!==""&&!validScore(m.sa,m.sb)) return +m.sa>+m.sb?"a":"b";
   return "";
@@ -432,35 +461,50 @@ const SHOW = 4;
 let showAll = false;
 function renderRounds(){
   const box = document.getElementById("rounds");
+  const fe = document.activeElement, keepId = fe && fe.classList && fe.classList.contains("setin") ? fe.id : null, keepVal = keepId ? fe.value : null;
   box.innerHTML = "";
   const first = showAll ? 0 : Math.max(0, S.rounds.length - SHOW);
   for(let ri=S.rounds.length-1; ri>=first; ri--){
     const r = S.rounds[ri];
     const div = document.createElement("div"); div.className="round";
-    div.innerHTML = `<div class="round-head"><h3>Round ${ri+1}</h3><span class="sit">${r.sit.length ? "Resting: "+r.sit.map(nm).join(", ") : "Everyone plays"}</span></div>`;
+    div.innerHTML = `<div class="round-head"><h3>Game ${ri+1}</h3><span class="sit">${r.sit.length ? "Resting: "+r.sit.map(nm).join(", ") : "Everyone plays"}</span></div>`;
     r.matches.forEach((m,mi)=>{
-      const w = winnerOf(m);
-      const el = document.createElement("div"); el.className="match";
+      if(!m.sc) m.sc = emptySc();
+      const w = winnerOf(m), scored = hasScores(m), s3 = needSet3(m) || keepId === `sc-${ri}-${mi}-a-2` || keepId === `sc-${ri}-${mi}-b-2`;
+      const sets = s3 ? 3 : 2;
+      const el = document.createElement("div"); el.className="match sets"+sets;
+      const cell = (side,k)=>`<input class="setin" type="number" inputmode="numeric" min="0" max="99" id="sc-${ri}-${mi}-${side}-${k}" data-side="${side}" data-k="${k}" value="${m.sc[side][k]}" aria-label="Set ${k+1} score for ${side==="a"?"first":"second"} team"${setWin(m,k)===side?' data-won="1"':""}>`;
       const row = (side, team)=>`
-        <label class="team pick ${w===side?"won":""}" for="w-${ri}-${mi}-${side}">
-          <span class="names">${nm(team[0])} &amp; ${nm(team[1])}</span>
-          <span class="tick"><input type="checkbox" id="w-${ri}-${mi}-${side}" data-side="${side}" ${w===side?"checked":""}><span>Winner</span></span>
-        </label>`;
-      el.innerHTML = `<div class="court-tag">Court ${mi+1}${w?"":`<span class="hint"> · tap the winning team</span>`}</div>${row("a",m.a)}<div class="vs">VS</div>${row("b",m.b)}`;
-      el.querySelectorAll("input").forEach(inp=>{
-        inp.disabled = !canWrite;
+        <div class="team srow ${w===side?"won":""}">
+          <label class="names" for="w-${ri}-${mi}-${side}">${nm(team[0])} &amp; ${nm(team[1])}</label>
+          ${[0,1,2].slice(0,sets).map(k=>cell(side,k)).join("")}
+          <input class="wbox" type="checkbox" id="w-${ri}-${mi}-${side}" data-side="${side}" ${w===side?"checked":""} aria-label="Winner">
+        </div>`;
+      const hint = w ? "" : (scored ? " · enter the next set" : " · enter set scores or tick the winner");
+      el.innerHTML = `<div class="srow shead"><span class="court-tag">Court ${mi+1}<span class="hint">${hint}</span></span>${[0,1,2].slice(0,sets).map(k=>`<span class="sh">Set ${k+1}</span>`).join("")}<span class="sh">Win</span></div>${row("a",m.a)}${row("b",m.b)}`;
+      el.querySelectorAll(".wbox").forEach(inp=>{
+        inp.disabled = !canWrite || scored;
+        inp.title = scored ? "Set by the scores" : "Tick the winner";
         inp.addEventListener("change",()=> act.tick(ri, mi, inp.checked ? inp.dataset.side : ""));
+      });
+      el.querySelectorAll(".setin").forEach(inp=>{
+        inp.disabled = !canWrite;
+        inp.addEventListener("change",()=>{
+          let v = inp.value.trim(); if(v!==""){ v = String(Math.max(0, Math.min(99, parseInt(v,10)||0))); }
+          act.score(ri, mi, inp.dataset.side, +inp.dataset.k, v);
+        });
       });
       div.appendChild(el);
     });
     box.appendChild(div);
   }
-  if(!S.rounds.length){ box.innerHTML = `<p class="note" style="margin-top:16px">No rounds yet. Tap “Generate next round” to start.</p>`; return; }
+  if(keepId){ const el = document.getElementById(keepId); if(el){ el.value = keepVal; try{ el.focus({preventScroll:true}); }catch(e){ el.focus(); } } }
+  if(!S.rounds.length){ box.innerHTML = `<p class="note" style="margin-top:16px">No games yet. Tap “Generate next game” to start.</p>`; return; }
   if(S.rounds.length > SHOW){
     const hidden = S.rounds.length - SHOW;
     const b = document.createElement("button");
     b.className = "btn ghost more"; b.id = "moreBtn";
-    b.textContent = showAll ? "Show only the latest 4 rounds" : `Show ${hidden} earlier round${hidden>1?"s":""}`;
+    b.textContent = showAll ? "Show only the latest 4 games" : `Show ${hidden} earlier game${hidden>1?"s":""}`;
     b.addEventListener("click",()=>{ showAll = !showAll; renderRounds(); });
     box.appendChild(b);
   }
@@ -489,7 +533,7 @@ function renderMatrix(){
     for(let j=0;j<N;j++){
       if(i===j){ h+=`<td class="self"></td>`; continue; }
       const r = used.get(pk(i,j));
-      h += r ? `<td class="used" title="Round ${r}">R${r}</td>` : `<td>·</td>`;
+      h += r ? `<td class="used" title="Game ${r}">G${r}</td>` : `<td>·</td>`;
     }
     h += "</tr>";
   }
@@ -522,7 +566,7 @@ function renderPlayers(){
   const sel = document.getElementById("gamesSel"), opts = gameOptions(n);
   const want = sel.dataset.n == n && opts.includes(+sel.value) ? +sel.value : (sameLineup() && opts.includes(4*MAX/N) ? 4*MAX/N : defaultGames(n));
   sel.dataset.n = n;
-  sel.innerHTML = opts.map(g=>`<option value="${g}" ${g===want?"selected":""}>${g} games each · ${n*g/4} matches</option>`).join("");
+  sel.innerHTML = opts.map(g=>`<option value="${g}" ${g===want?"selected":""}>${g} matches each · ${n*g/4} total</option>`).join("");
   sel.disabled = !canWrite;
   const note = document.getElementById("rosterNote");
   if(sameLineup()){ note.hidden = true; }
@@ -543,7 +587,7 @@ function renderStats(){
   const done = played >= MAX;
   const gb = document.getElementById("genBtn");
   gb.disabled = done;
-  gb.textContent = done ? `All ${MAX} matches drawn` : "Generate next round";
+  gb.textContent = done ? `All ${MAX} matches drawn` : "Generate next game";
   const msg = document.getElementById("genMsg");
   if(done){
     msg.innerHTML = scored >= MAX
@@ -553,7 +597,7 @@ function renderStats(){
   document.getElementById("sPairs").textContent = used.size + "/" + (N*(N-1)/2);
   const g = 4*MAX/N, full = Math.floor(MAX/COURTS), extra = MAX - full*COURTS;
   document.getElementById("planNote").textContent =
-    `${N} players, ${MAX} matches on ${COURTS} court${COURTS>1?"s":""}: ${full} rounds of ${COURTS} match${COURTS>1?"es":""}${extra?` plus 1 round of ${extra}`:""}. Every player plays exactly ${g} games and never partners anyone twice. Tick the winning team after each match. The 4 latest rounds are shown.`;
+    `${N} players, ${MAX} matches on ${COURTS} court${COURTS>1?"s":""}: ${full} games of ${COURTS} match${COURTS>1?"es":""}${extra?` plus 1 game of ${extra}`:""}. Every player plays exactly ${g} matches and never partners anyone twice. Each match is best of 3 sets: type the set scores and the winner is ticked for you, or just tick the winner. The 4 latest games are shown.`;
   document.getElementById("undoBtn").disabled = !S.rounds.length;
   document.body.classList.toggle("readonly", !canWrite);
 }
@@ -569,17 +613,19 @@ function showMsg(html){ document.getElementById("genMsg").innerHTML = html; }
 
 // Shared doc -> view state
 function fromDoc(d){
-  const wins = d.wins || {};
+  const wins = d.wins || {}, scores = d.scores || {};
   return normalize({ players: d.players.slice(), plan: d.plan, roster: d.roster ? d.roster.map(r=>({id:r.id, name:r.name})) : null, pids: d.pids ? d.pids.slice() : null,
     rounds: d.plan.slice(0, d.revealed).map((r,ri)=>({ sit:r.sit,
-      matches: r.matches.map((m,mi)=>({a:m.a, b:m.b, win: wins[ri+"_"+mi] || ""})) })) });
+      matches: r.matches.map((m,mi)=>{ const sc = scores[ri+"_"+mi] || {}, o = emptySc(); [0,1,2].forEach(k=>{ o.a[k] = sc["a"+k]!=null ? String(sc["a"+k]) : ""; o.b[k] = sc["b"+k]!=null ? String(sc["b"+k]) : ""; });
+        return {a:m.a, b:m.b, win: wins[ri+"_"+mi] || "", sc:o}; }) })) });
 }
 // Local state -> shared doc
 function toDoc(st){
-  const wins = {};
-  st.rounds.forEach((r,ri)=>r.matches.forEach((m,mi)=>{ const w=winnerOf(m); if(w) wins[ri+"_"+mi]=w; }));
+  const wins = {}, scores = {};
+  st.rounds.forEach((r,ri)=>r.matches.forEach((m,mi)=>{ const w=winnerOf(m); if(w) wins[ri+"_"+mi]=w;
+    if(hasScores(m)){ const o={}; [0,1,2].forEach(k=>{ if(m.sc.a[k]!=="") o["a"+k]=m.sc.a[k]; if(m.sc.b[k]!=="") o["b"+k]=m.sc.b[k]; }); scores[ri+"_"+mi]=o; } }));
   const plan = st.plan.map(r=>({sit:r.sit, matches:r.matches.map(m=>({a:m.a, b:m.b}))}));
-  return { tid: Math.random().toString(36).slice(2,10), players: st.players.slice(), roster: st.roster.map(r=>({id:r.id, name:r.name})), pids: st.pids.slice(), plan, revealed: st.rounds.length, wins };
+  return { tid: Math.random().toString(36).slice(2,10), players: st.players.slice(), roster: st.roster.map(r=>({id:r.id, name:r.name})), pids: st.pids.slice(), plan, revealed: st.rounds.length, wins, scores };
 }
 
 async function write(fn){
@@ -595,6 +641,14 @@ const act = {
   tick(ri, mi, side){
     if(mode==="shared") write(()=>ops.setWin(ri+"_"+mi, side));
     else { S.rounds[ri].matches[mi].win = side; delete S.rounds[ri].matches[mi].sa; save(); renderAll(); }
+  },
+  score(ri, mi, side, k, v){
+    const m = S.rounds[ri].matches[mi]; if(!m.sc) m.sc = emptySc();
+    m.sc[side][k] = v;
+    const w = hasScores(m) ? setsWinner(m) : "";
+    m.win = w;
+    if(mode==="shared") write(()=>ops.setScore(ri+"_"+mi, side+k, v, w));
+    else { save(); renderAll(); }
   },
   reveal(){
     if(playedCount() >= MAX) return;
@@ -642,7 +696,7 @@ document.getElementById("genBtn").addEventListener("click",()=>{ showMsg(""); ac
 document.getElementById("undoBtn").addEventListener("click",()=>{ showMsg(""); act.undo(); });
 document.getElementById("resetBtn").addEventListener("click",()=>{
   const box = document.getElementById("resetBox");
-  box.innerHTML = `<div class="confirm"><span>This clears all rounds and winners${mode==="shared"?" for everyone":""} and builds a new schedule for the ${S.roster.length} players in the list.</span><button class="btn danger" id="resetYes">Clear everything</button><button class="btn ghost" id="resetNo">Keep it</button></div>`;
+  box.innerHTML = `<div class="confirm"><span>This clears all games, scores and winners${mode==="shared"?" for everyone":""} and builds a new schedule for the ${S.roster.length} players in the list.</span><button class="btn danger" id="resetYes">Clear everything</button><button class="btn ghost" id="resetNo">Keep it</button></div>`;
   document.getElementById("resetNo").onclick = ()=> box.innerHTML="";
   document.getElementById("resetYes").onclick = ()=>{ box.innerHTML=""; act.reset(); };
 });
@@ -668,13 +722,13 @@ function drawStart(){
   const card = document.createElement("div"); card.className = "start";
   if(canWrite){
     card.innerHTML = `<b>Put this tournament online</b>
-      <span class="note" style="margin:0">Your current rounds, winners and names move online. Everyone with the link then sees the same results live.</span>
+      <span class="note" style="margin:0">Your current games, scores, winners and names move online. Everyone with the link then sees the same results live.</span>
       <button class="btn" id="goLive">Start shared tournament</button>`;
     box.prepend(card);
     document.getElementById("goLive").onclick = (e)=>{ e.target.disabled = true; write(()=>ops.setAll(toDoc(S))); };
     setSync("", "Not shared yet");
   } else {
-    card.innerHTML = `<b>Waiting for the organizer</b><span class="note" style="margin:0">The rounds appear here once the organizer starts the tournament. Organizer: sign in on the Players tab first.</span>`;
+    card.innerHTML = `<b>Waiting for the organizer</b><span class="note" style="margin:0">The games appear here once the organizer starts the tournament. Organizer: sign in on the Players tab first.</span>`;
     box.innerHTML = ""; box.appendChild(card);
     setSync("", "View only");
   }
@@ -699,7 +753,8 @@ const FIREBASE_CONFIG = {
   const root = firebase.database().ref("tournament");
   ops = {
     setWin:(k,side)=> root.child("wins/"+k).set(side || null),
-    setRevealed:(n,clearKeys)=>{ const u={revealed:n}; clearKeys.forEach(k=>u["wins/"+k]=null); return root.update(u); },
+    setScore:(key,field,v,w)=> root.update({["scores/"+key+"/"+field]: v===""?null:+v, ["wins/"+key]: w || null}),
+    setRevealed:(n,clearKeys)=>{ const u={revealed:n}; clearKeys.forEach(k=>{ u["wins/"+k]=null; u["scores/"+k]=null; }); return root.update(u); },
     setNames:(roster, players)=> root.update({roster, players}),
     setAll:(doc)=> root.set(doc)
   };
@@ -779,6 +834,7 @@ const FIREBASE_CONFIG = {
     if(d.roster) d.roster = Object.values(d.roster);
     if(d.pids) d.pids = Object.values(d.pids);
     d.wins = d.wins || {};
+    d.scores = d.scores || {};
     D = d; mode = "shared"; S = fromDoc(d);
     renderAll(); syncText();
   }, ()=> setSync("", "Can't reach the tournament database. Check the internet connection and reload."));
