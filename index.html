@@ -251,7 +251,7 @@ tr.top td.rank{color:var(--cork)}
       <label class="inline" for="gamesSel" style="margin-bottom:8px">Next tournament
         <select id="gamesSel"></select>
       </label>
-      <p class="note" style="margin:0 0 10px">More matches makes the tournament longer. Everyone always plays the same number of matches and never partners anyone twice.</p>
+      <p class="note" style="margin:0 0 10px">Pick how many games each player plays: players − 1, − 2 or − 3. If the numbers don’t divide evenly, a few players play one game fewer. No one ever partners anyone twice.</p>
     </div>
     <div class="row"><button class="btn danger" id="resetBtn">Start a new tournament</button></div>
     <div id="resetBox"></div>
@@ -274,21 +274,25 @@ function defaultRoster(n){ return Array.from({length:n},(_,i)=>({id:rid(), name:
 const pk = (a,b) => a<b ? a+"-"+b : b+"-"+a;
 let S;
 
-// Games-per-player choices for n players: everyone equal, never the same partner twice.
-function gameOptions(n){ const o=[]; for(let g=2; g<=n-1; g++) if((n*g)%4===0) o.push(g); return o; }
-function defaultGames(n){ const o=gameOptions(n); const le=o.filter(g=>g<=12); return le.length ? le[le.length-1] : o[0]; }
+// Games-per-player choices for n players: players-1, players-2, players-3. Never the same partner twice.
+// When n*g doesn't divide by 4, a few players (1 to 3) play one game fewer.
+function gameOptions(n){ return [n-1, n-2, n-3].filter(g=>g>=2); }
+function defaultGames(n){ return gameOptions(n)[0]; }
+function planShape(n, g){ const M = Math.floor(n*g/4), short = n*g - 4*M; return {M, short}; }
 
-// Partnership graph: every player gets exactly g different partners (a random g-regular graph).
-function regularGraph(n, g){
-  const adj = Array.from({length:n},()=>new Set());
-  const add=(a,b)=>{ adj[a].add(b); adj[b].add(a); };
-  for(let i=0;i<n;i++) for(let k=1;k<=Math.floor(g/2);k++) add(i,(i+k)%n);
-  if(g%2) for(let i=0;i<n/2;i++) add(i,i+n/2);
-  let edges=[]; adj.forEach((s,a)=>s.forEach(b=>{ if(a<b) edges.push([a,b]); }));
-  const perm = shuffle([...Array(n).keys()]);
-  edges = edges.map(([a,b])=>[perm[a],perm[b]]);
-  const key=(a,b)=>a<b?a+"-"+b:b+"-"+a, set=new Set(edges.map(e=>key(...e)));
-  for(let t=0;t<edges.length*20;t++){ // random edge swaps keep every player's partner count
+// Partnership graph with a given number of partners per player (random, via Havel-Hakimi + edge swaps).
+function degreeGraph(deg){
+  const n = deg.length, left = deg.slice(), edges = [], set = new Set();
+  const key=(a,b)=>a<b?a+"-"+b:b+"-"+a;
+  while(true){
+    const order = shuffle([...Array(n).keys()]).filter(v=>left[v]>0).sort((x,y)=>left[y]-left[x]);
+    if(!order.length) break;
+    const v = order[0], need = left[v], cand = order.slice(1);
+    if(cand.length < need) return null;
+    for(let k=0;k<need;k++){ const u=cand[k]; edges.push([v,u]); set.add(key(v,u)); left[u]--; }
+    left[v] = 0;
+  }
+  for(let t=0;t<edges.length*20;t++){ // random swaps keep every player's partner count
     const i=Math.floor(Math.random()*edges.length), j=Math.floor(Math.random()*edges.length);
     if(i===j) continue;
     let [a,b]=edges[i], [c,d]=edges[j];
@@ -299,7 +303,24 @@ function regularGraph(n, g){
   }
   return edges;
 }
-// Splits items into groups of `size` whose players don't overlap; null if it gets stuck.
+// Pairs partnerships into matches (two pairs with no shared player). Most-constrained first.
+function pairEdges(edges){
+  const left = shuffle(edges.slice()), out = [];
+  const clash = (e,f)=> e[0]===f[0]||e[0]===f[1]||e[1]===f[0]||e[1]===f[1];
+  while(left.length){
+    let bi = -1, bopts = null;
+    for(let i=0;i<left.length;i++){
+      const opts = []; for(let j=0;j<left.length;j++) if(j!==i && !clash(left[i],left[j])) opts.push(j);
+      if(!opts.length) return null;
+      if(!bopts || opts.length < bopts.length){ bi=i; bopts=opts; if(opts.length===1) break; }
+    }
+    const j = bopts[Math.floor(Math.random()*bopts.length)];
+    out.push([left[bi], left[j]]);
+    [bi,j].sort((x,y)=>y-x).forEach(k=>left.splice(k,1));
+  }
+  return out;
+}
+// Splits items into groups of `size` whose players don't overlap.
 function groupDisjoint(items, size, playersOf){
   const left = shuffle(items.slice()), out = [];
   while(left.length){
@@ -314,28 +335,34 @@ function groupDisjoint(items, size, playersOf){
   return out;
 }
 function planFor(n, g, courts){
-  const M = n*g/4, deadline = Date.now()+2500;
+  const {M, short} = planShape(n, g), start = Date.now(), deadline = start+2500;
+  let bestRounds = null, bestPart = 1e9;
   while(Date.now() < deadline){
-    const edges = regularGraph(n, g);
-    const ms = groupDisjoint(edges, 2, e=>e).filter(x=>x.length===2);
-    if(ms.length !== M) continue;
+    const deg = Array(n).fill(g); shuffle([...Array(n).keys()]).slice(0, short).forEach(p=>deg[p]--);
+    const edges = degreeGraph(deg); if(!edges || edges.length !== 2*M) continue;
+    const ms = pairEdges(edges); if(!ms || ms.length !== M) continue;
     const matches = ms.map(([a,b])=>({a,b}));
     const pl = m=>[...m.a,...m.b];
-    let rounds = groupDisjoint(matches, courts, pl);
-    if(rounds.filter(r=>r.length<courts).length > (M%courts ? 1 : 0)) continue;
-    // order rounds so rests are spread out: next round favours whoever waited longest
-    const last = Array(n).fill(-1), order=[]; rounds = shuffle(rounds);
-    const full = rounds.filter(r=>r.length===courts), part = rounds.filter(r=>r.length<courts);
-    for(let t=0; full.length; t++){
-      let bi=0, bs=-1e9;
-      full.forEach((r,i)=>{ const sc = r.flatMap(pl).reduce((x,p)=>x+Math.min(4, t-last[p]),0) + Math.random(); if(sc>bs){bs=sc;bi=i;} });
-      const r = full.splice(bi,1)[0]; r.flatMap(pl).forEach(p=>last[p]=t); order.push(r);
-    }
-    order.push(...part);
-    return order.map(r=>{ const on=new Set(r.flatMap(pl)); return { matches: r.map(m=>({a:m.a, b:m.b, win:""})), sit: [...Array(n).keys()].filter(p=>!on.has(p)) }; });
+    const rounds = groupDisjoint(matches, courts, pl);
+    const part = rounds.filter(r=>r.length<courts).length;
+    if(part < bestPart){ bestPart = part; bestRounds = rounds; }
+    if(part <= (M%courts ? 1 : 0)) break;
+    if(Date.now() > start+2200 && bestRounds) break; // accept a few one-court games rather than fail
   }
-  return null;
+  if(!bestRounds) return null;
+  // order games so rests are spread out: next game favours whoever waited longest
+  const pl = m=>[...m.a,...m.b];
+  const last = Array(n).fill(-1), order=[], pool = shuffle(bestRounds.slice());
+  const full = pool.filter(r=>r.length===courts), part = pool.filter(r=>r.length<courts);
+  for(let t=0; full.length; t++){
+    let bi=0, bs=-1e9;
+    full.forEach((r,i)=>{ const sc = r.flatMap(pl).reduce((x,p)=>x+Math.min(4, t-last[p]),0) + Math.random(); if(sc>bs){bs=sc;bi=i;} });
+    const r = full.splice(bi,1)[0]; r.flatMap(pl).forEach(p=>last[p]=t); order.push(r);
+  }
+  order.push(...part);
+  return order.map(r=>{ const on=new Set(r.flatMap(pl)); return { matches: r.map(m=>({a:m.a, b:m.b, win:""})), sit: [...Array(n).keys()].filter(p=>!on.has(p)) }; });
 }
+function perPlayer(plan, n){ const c = Array(n).fill(0); (plan||[]).forEach(r=>r.matches.forEach(m=>[...m.a,...m.b].forEach(p=>c[p]++))); return c; }
 
 // Builds a whole new tournament (plan + first round shown) for a roster of {id,name}.
 function makeTournament(roster, g){
@@ -564,9 +591,10 @@ function renderPlayers(){
   document.getElementById("addBtn").disabled = n >= MAX_P;
   document.getElementById("rosterCount").textContent = `${n} player${n===1?"":"s"} (${MIN_P} to ${MAX_P})`;
   const sel = document.getElementById("gamesSel"), opts = gameOptions(n);
-  const want = sel.dataset.n == n && opts.includes(+sel.value) ? +sel.value : (sameLineup() && opts.includes(4*MAX/N) ? 4*MAX/N : defaultGames(n));
+  const cur = Math.max(0, ...perPlayer(S.plan, N));
+  const want = sel.dataset.n == n && opts.includes(+sel.value) ? +sel.value : (sameLineup() && opts.includes(cur) ? cur : defaultGames(n));
   sel.dataset.n = n;
-  sel.innerHTML = opts.map(g=>`<option value="${g}" ${g===want?"selected":""}>${g} matches each · ${n*g/4} total</option>`).join("");
+  sel.innerHTML = opts.map(g=>{ const {M, short} = planShape(n, g); return `<option value="${g}" ${g===want?"selected":""}>${g} games · ${M} matches${short?` (${short} play ${g-1})`:""}</option>`; }).join("");
   sel.disabled = !canWrite;
   const note = document.getElementById("rosterNote");
   if(sameLineup()){ note.hidden = true; }
@@ -595,9 +623,10 @@ function renderStats(){
       : `<div class="done">All ${MAX} matches are drawn. ${MAX-scored} still need a winner.</div>`;
   } else if(msg.querySelector(".done")) msg.innerHTML = "";
   document.getElementById("sPairs").textContent = used.size + "/" + (N*(N-1)/2);
-  const g = 4*MAX/N, full = Math.floor(MAX/COURTS), extra = MAX - full*COURTS;
+  const pp = perPlayer(S.plan, N), g = Math.max(0, ...pp), fewer = pp.filter(x=>x<g).length;
+  const full = (S.plan||[]).filter(r=>r.matches.length===COURTS).length, extra = (S.plan||[]).length - full;
   document.getElementById("planNote").textContent =
-    `${N} players, ${MAX} matches on ${COURTS} court${COURTS>1?"s":""}: ${full} games of ${COURTS} match${COURTS>1?"es":""}${extra?` plus 1 game of ${extra}`:""}. Every player plays exactly ${g} matches and never partners anyone twice. Each match is best of 3 sets: type the set scores and the winner is ticked for you, or just tick the winner. The 4 latest games are shown.`;
+    `${N} players, ${MAX} matches on ${COURTS} court${COURTS>1?"s":""}: ${full} games of ${COURTS} match${COURTS>1?"es":""}${extra?` plus ${extra} game${extra>1?"s":""} of 1 match`:""}. ${fewer ? `Each player plays ${g} matches, except ${fewer} who play ${g-1}` : `Every player plays exactly ${g} matches`}, and no one partners anyone twice. Each match is best of 3 sets: type the set scores and the winner is ticked for you, or just tick the winner. The 4 latest games are shown.`;
   document.getElementById("undoBtn").disabled = !S.rounds.length;
   document.body.classList.toggle("readonly", !canWrite);
 }
