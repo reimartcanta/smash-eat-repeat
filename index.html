@@ -153,6 +153,9 @@ tr.top td.rank{color:var(--cork)}
 .addrow input{flex:1;min-width:0}
 .note.warn{color:var(--warn);font-weight:600}
 .readonly .xbtn,.readonly #addRow,.readonly .edit-only{display:none}
+.adminlist{display:grid;gap:6px}
+.arow{display:flex;align-items:center;gap:8px;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 6px 6px 12px;min-width:0}
+.arow span{min-width:0;overflow-wrap:anywhere;font-weight:600}
 .confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;padding:10px 12px;border:1px solid var(--warn);border-radius:8px}
 @media (prefers-reduced-motion:no-preference){.match{animation:in .25s ease both}@keyframes in{from{transform:translateY(4px)}to{transform:none}}}
 </style>
@@ -216,8 +219,18 @@ tr.top td.rank{color:var(--cork)}
     <p class="note warn" id="rosterNote" hidden></p>
     <p class="note edit-only">Names save as you type. Tap ✕ twice to remove a player.</p>
     <h2 style="margin-top:22px">Organizer</h2>
-    <div class="row" id="authRow"><button class="btn" id="signInBtn">Organizer sign in with Google</button><span class="sit" id="authInfo"></span><button class="btn ghost" id="signOutBtn" hidden>Sign out</button></div>
-    <p class="note">Only the organizer signs in. Everyone else just opens the link to watch.</p>
+    <div class="row" id="authRow"><button class="btn" id="signInBtn">Organizer / admin sign in with Google</button><span class="sit" id="authInfo"></span><button class="btn ghost" id="signOutBtn" hidden>Sign out</button></div>
+    <p class="note">Only the organizer and admins sign in. Everyone else just opens the link to watch.</p>
+    <div id="adminBox" hidden style="margin-top:16px">
+      <h2>Admins</h2>
+      <p class="note" style="margin:0 0 10px">Admins sign in with their own Google account and can tick winners, run rounds and edit players. Only you can add or remove admins.</p>
+      <div id="adminList" class="adminlist"></div>
+      <form class="row addrow" id="adminForm" style="margin-top:10px">
+        <input type="email" id="adminEmail" placeholder="Admin's Gmail address" aria-label="Admin's Gmail address" autocomplete="off">
+        <button class="btn" type="submit">Add admin</button>
+      </form>
+      <p class="note warn" id="adminMsg" hidden></p>
+    </div>
     <div class="edit-only" style="margin-top:18px">
       <label class="inline" for="gamesSel" style="margin-bottom:8px">Next tournament
         <select id="gamesSel"></select>
@@ -572,7 +585,7 @@ function toDoc(st){
 async function write(fn){
   try{ await fn(); }
   catch(e){
-    if(e && /PERMISSION_DENIED|permission/i.test((e.code||"")+" "+(e.message||""))){ canWrite=false; renderAll(); setSync("", "View only. Only the organizer's Google account can make changes."); }
+    if(e && /PERMISSION_DENIED|permission/i.test((e.code||"")+" "+(e.message||""))){ canWrite=false; renderAll(); setSync("", "View only. Only the organizer or an admin can make changes."); }
     else showMsg(`<div class="msg">That change didn't save. Check your connection and try again.</div>`);
   }
 }
@@ -691,17 +704,66 @@ const FIREBASE_CONFIG = {
     setAll:(doc)=> root.set(doc)
   };
   canWrite = false;
-  let signedIn = false;
+  let signedIn = false, role = "";
+  const OWNER = "reimartcanta@gmail.com";
+  const adminsRef = firebase.database().ref("admins");
+  const ekey = e => e.trim().toLowerCase().replace(/\./g, ",");
+  let adminsOff = null, selfOff = null, removeSure = null;
+  const adminBox = document.getElementById("adminBox"), adminList = document.getElementById("adminList"), adminMsg = document.getElementById("adminMsg");
+  function adminNote(t){ adminMsg.hidden = !t; adminMsg.textContent = t || ""; }
+  function drawAdmins(map){
+    const keys = Object.keys(map || {}).filter(k=>map[k]===true).sort();
+    adminList.innerHTML = keys.length ? keys.map(k=>`<div class="arow"><span>${k.replace(/,/g,".")}</span><button class="xbtn ${removeSure===k?"sure":""}" type="button" data-k="${k}">${removeSure===k?"Remove":"✕"}</button></div>`).join("")
+      : `<p class="note" style="margin:0">No admins yet.</p>`;
+    adminList.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+      const k = b.dataset.k;
+      if(removeSure===k){ removeSure=null; adminsRef.child(k).remove().catch(()=>adminNote("Couldn't remove. Check the Firebase rules.")); }
+      else { removeSure=k; drawAdmins(map); }
+    });
+  }
+  document.getElementById("adminForm").addEventListener("submit", e=>{
+    e.preventDefault();
+    const inp = document.getElementById("adminEmail"), em = inp.value.trim().toLowerCase();
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)){ adminNote("Type a full email address, like name@gmail.com."); return; }
+    if(em === OWNER){ adminNote("That's you. You're already the organizer."); return; }
+    adminNote(""); inp.value = "";
+    adminsRef.child(ekey(em)).set(true).catch(()=>adminNote("Couldn't add the admin. Update the Firebase database rules first (see the setup steps)."));
+  });
   const info = document.getElementById("authInfo"), inBtn = document.getElementById("signInBtn"), outBtn = document.getElementById("signOutBtn");
   function syncText(){
     if(mode!=="shared") return;
-    setSync("live", canWrite ? "Live. You're the organizer. Everyone with the link sees your changes." : "Live. Results update as the organizer ticks winners.");
+    setSync("live", canWrite ? `Live. You're ${role==="admin"?"an admin":"the organizer"}. Everyone with the link sees your changes.` : "Live. Results update as the organizer ticks winners.");
+  }
+  function applyRole(r){
+    role = r; canWrite = r === "owner" || r === "admin";
+    renderAll(); syncText();
   }
   auth.onAuthStateChanged(u=>{
-    signedIn = !!u; canWrite = signedIn;
+    signedIn = !!u;
     inBtn.hidden = signedIn; outBtn.hidden = !signedIn;
-    info.textContent = u ? "Signed in as " + (u.displayName || u.email || "organizer") : "";
-    renderAll(); syncText();
+    if(adminsOff){ adminsOff(); adminsOff = null; }
+    if(selfOff){ selfOff(); selfOff = null; }
+    adminBox.hidden = true; adminNote("");
+    const email = u && u.email ? u.email.toLowerCase() : "";
+    const who = u ? (u.displayName || u.email || "organizer") : "";
+    if(!u){ info.textContent = ""; applyRole(""); return; }
+    if(email === OWNER){
+      info.textContent = "Signed in as " + who + " (organizer)";
+      adminBox.hidden = false;
+      const h = adminsRef.on("value", sn=>drawAdmins(sn.val()), ()=>{ adminList.innerHTML = ""; adminNote("Admins need the updated Firebase database rules (see the setup steps)."); });
+      adminsOff = ()=> adminsRef.off("value", h);
+      applyRole("owner");
+    } else {
+      info.textContent = "Signed in as " + who + " · checking access…";
+      applyRole("");
+      const ref = adminsRef.child(ekey(email));
+      const h = ref.on("value", sn=>{
+        const ok = sn.val() === true;
+        info.textContent = "Signed in as " + who + (ok ? " (admin)" : " · not an admin, view only");
+        applyRole(ok ? "admin" : "viewer");
+      }, ()=>{ info.textContent = "Signed in as " + who + " · not an admin, view only"; applyRole("viewer"); });
+      selfOff = ()=> ref.off("value", h);
+    }
   });
   inBtn.onclick = async ()=>{
     const p = new firebase.auth.GoogleAuthProvider();
